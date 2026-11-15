@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SyncFlow — Docker 1: Ingress Gateway</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-canvas: #09090b;
+            --bg-surface: #111113;
+            --bg-elevated: #18181b;
+            --border-subtle: #27272a;
+            --border-focus: #3f3f46;
+            --text-primary: #fafafa;
+            --text-secondary: #a1a1aa;
+            --accent-emerald: #10b981;
+            --accent-cyan: #06b6d4;
+            --accent-rose: #f43f5e;
+        }
+        body {
+            background-color: var(--bg-canvas);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, sans-serif;
+            margin: 0;
+            -webkit-font-smoothing: antialiased;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .topbar {
+            background-color: rgba(9, 9, 11, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 12px 24px;
+        }
+        .nav-tab {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            border: 1px solid transparent;
+        }
+        .nav-tab:hover { color: var(--text-primary); background: var(--bg-elevated); }
+        .nav-tab.active {
+            color: var(--text-primary);
+            background: var(--bg-elevated);
+            border-color: var(--border-focus);
+        }
+        .panel {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 24px;
+        }
+        .label-micro {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            display: block;
+        }
+        .input-modern {
+            background: var(--bg-canvas) !important;
+            border: 1px solid var(--border-subtle) !important;
+            color: var(--text-primary) !important;
+            font-size: 0.85rem;
+            border-radius: 6px;
+            padding: 9px 12px;
+        }
+        .input-modern:focus {
+            border-color: var(--border-focus) !important;
+            box-shadow: none !important;
+        }
+        .btn-ghost {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            font-size: 0.82rem;
+            font-weight: 500;
+            padding: 7px 14px;
+            border-radius: 6px;
+            transition: 0.15s;
+        }
+        .btn-ghost:hover { background: #27272a; border-color: #52525b; color: #fff; }
+        .btn-danger-subtle {
+            background: rgba(244, 63, 94, 0.1);
+            border: 1px solid rgba(244, 63, 94, 0.3);
+            color: #fb7185;
+            font-size: 0.84rem;
+            font-weight: 500;
+            padding: 10px 16px;
+            border-radius: 6px;
+            transition: 0.15s;
+        }
+        .btn-danger-subtle:hover { background: rgba(244, 63, 94, 0.18); border-color: #f43f5e; color: #fff; }
+        .console-stream {
+            background: #050506;
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            line-height: 1.65;
+            height: 410px;
+            overflow-y: auto;
+            padding: 16px;
+            color: #d4d4d8;
+        }
+        .status-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--accent-emerald);
+            display: inline-block;
+            box-shadow: 0 0 8px var(--accent-emerald);
+        }
+        .pill-badge {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 99px;
+        }
+    </style>
+</head>
+<body>
+
+<header class="topbar d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-4">
+        <a href="index.html" class="text-decoration-none d-flex align-items-center gap-2 text-white fw-semibold">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <span style="letter-spacing: -0.02em;">SyncFlow</span>
+        </a>
+        <nav class="d-flex align-items-center gap-1">
+            <a class="nav-tab active" href="security.html">Docker 1: Security Gateway</a>
+            <a class="nav-tab" href="index.html">Docker 2: Virtualization & Edge Lab</a>
+            <a class="nav-tab" href="datastore.html">Docker 3: MongoDB Datastore</a>
+        </nav>
+    </div>
+    <div class="pill-badge mono d-flex align-items-center gap-2">
+        <span class="status-dot"></span>
+        <span>NODE-01 // NGINX:8080</span>
+    </div>
+</header>
+
+<main class="container-fluid px-4 py-4">
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="panel h-100">
+                <div class="d-flex justify-content-between align-items-start mb-4">
+                    <div>
+                        <h6 class="fw-semibold mb-1 text-white">Ingress WAF & Access Policy</h6>
+                        <p class="text-secondary mb-0" style="font-size: 0.82rem;">Isolates Spring Boot JVM from direct external host exposure.</p>
+                    </div>
+                    <span class="pill-badge mono text-info">TLS / WAF</span>
+                </div>
+
+                <div class="mb-3">
+                    <label class="label-micro">Active Bearer Signing Key</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" id="secToken" class="form-control input-modern mono" value="sf_live_sec_token_9831a" readonly>
+                        <button class="btn-ghost text-nowrap" onclick="rotateToken()">
+                            <i class="fa-solid fa-rotate me-1 text-secondary"></i> Rotate
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="label-micro">Token Bucket Rate Limiter</label>
+                    <select class="form-select input-modern" id="rateLimit">
+                        <option value="100">100 req/sec — Standard Production Threshold</option>
+                        <option value="10">10 req/sec — Strict DDoS Mitigation Mode</option>
+                    </select>
+                </div>
+
+                <div class="mb-4 p-3 rounded" style="background: var(--bg-canvas); border: 1px solid var(--border-subtle);">
+                    <div class="form-check form-switch d-flex align-items-center justify-content-between ps-0 mb-0">
+                        <div>
+                            <div class="fw-medium text-white" style="font-size: 0.84rem;">Boundary Payload Sanitizer</div>
+                            <div class="text-secondary" style="font-size: 0.76rem;">Enforces strict delta constraints (-1000 to +1000)</div>
+                        </div>
+                        <input class="form-check-input ms-3" type="checkbox" id="sanitizerToggle" checked style="cursor:pointer;">
+                    </div>
+                </div>
+
+                <button class="btn-danger-subtle w-100" onclick="simulateAttack()">
+                    <i class="fa-solid fa-shield-halved me-2"></i>Simulate Unauthorized Ingress Probe
+                </button>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="panel h-100">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="label-micro mb-0">NGINX INGRESS ACCESS & REJECTION AUDIT</span>
+                    </div>
+                    <button class="btn-ghost py-1 px-2" style="font-size:0.75rem;" onclick="document.getElementById('secLogs').innerHTML=''">Clear</button>
+                </div>
+                <div class="console-stream" id="secLogs">
+                    <div><span class="text-secondary">[SYSTEM]</span> Nginx reverse proxy bound to 0.0.0.0:8080</div>
+                    <div><span class="text-secondary">[UPSTREAM]</span> Routing /api/v1/* &rarr; core-engine:8080 (bridge network)</div>
+                    <div><span class="text-secondary">[POLICY]</span> Token bucket initialized. Zero-trust header inspection active.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+    function logSec(msg) {
+        const s = document.getElementById('secLogs');
+        const ts = new Date().toISOString().substring(11, 23);
+        s.innerHTML += `<div><span style="color:#52525b;">${ts}</span> ${msg}</div>`;
+        s.scrollTop = s.scrollHeight;
+    }
+
+    function rotateToken() {
+        const rand = "sf_live_" + Math.random().toString(36).substring(2, 11);
+        document.getElementById('secToken').value = rand;
+        logSec(`<span style="color:#fbbf24;">[AUTH]</span> Signing key rotated. Issued new bearer token: <span class="text-white">${rand}</span>`);
+    }
+
+    function simulateAttack() {
+        logSec(`<span style="color:#fb7185;">[WARN]</span> Unauthenticated ingress packet intercepted from external socket.`);
+        setTimeout(() => {
+            logSec(`<span style="color:#f43f5e;">[DROP 403]</span> Missing valid Authorization header. Packet dropped at edge.`);
+            logSec(`<span style="color:#34d399;">[ISOLATED]</span> Docker 2 Core Engine remained completely unexposed.`);
+        }, 350);
+    }
+</script>
+</body>
+</html>

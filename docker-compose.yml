@@ -1,0 +1,65 @@
+services:
+  security:
+    build: ./security
+    container_name: syncflow-security
+    ports:
+      - "8080:80"
+    depends_on:
+      - core-engine
+      - edge-client
+    networks:
+      - frontend-net
+      - backend-net
+    restart: unless-stopped
+
+  core-engine:
+    build: ./syncflow-engine
+    container_name: syncflow-core
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/syncflow_db
+      SERVER_PORT: 8080
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - backend-net
+      - data-net
+    restart: unless-stopped
+
+  edge-client:
+    build: ./edge-client
+    container_name: syncflow-edge
+    expose:
+      - "80"
+    networks:
+      - frontend-net
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:8
+    container_name: syncflow-mongodb
+    environment:
+      MONGO_INITDB_DATABASE: syncflow_db
+    volumes:
+      - mongo-data:/data/db
+    expose:
+      - "27017"
+    networks:
+      - data-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+
+networks:
+  frontend-net:
+  backend-net:
+    internal: true
+  data-net:
+    internal: true
