@@ -256,8 +256,8 @@
 </main>
 
 <script>
-    let isCut = !navigator.onLine;
-    let manualOverride = false;
+    let isCut = false;
+    let manualMode = false;
     let outbox = [];
 
     function logHud(msg) {
@@ -295,36 +295,38 @@
     }
 
     function togglePartition() {
-        manualOverride = !isCut;
+        manualMode = !isCut;
         setNetworkState(!isCut, !isCut ? "Manual partition simulated" : "Manual link restored");
     }
 
-    // Automatic OS/Browser Wi-Fi detection
-    window.addEventListener('offline', () => {
-        manualOverride = false;
-        setNetworkState(true, "OS Wi-Fi interface disconnected");
-    });
-
-    window.addEventListener('online', () => {
-        manualOverride = false;
-        setNetworkState(false, "OS Wi-Fi interface reconnected");
-    });
-
-    // Initial check on page load
-    window.addEventListener('DOMContentLoaded', () => {
-        if (!navigator.onLine) {
-            isCut = false;
-            setNetworkState(true, "System booted in offline mode");
+    // Real Internet Heartbeat Check (Detects Wi-Fi disconnect even on localhost)
+    async function checkRealInternet() {
+        if (manualMode) return;
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 1500);
+            await fetch('https://www.gstatic.com/generate_204?t=' + Date.now(), {
+                mode: 'no-cors',
+                cache: 'no-store',
+                signal: controller.signal
+            });
+            clearTimeout(timeout);
+            if (isCut) setNetworkState(false, "Wi-Fi / Internet connection restored");
+        } catch (e) {
+            if (!isCut) setNetworkState(true, "Wi-Fi / Internet connection lost");
         }
-    });
+    }
+
+    setInterval(checkRealInternet, 2000);
+    window.addEventListener('offline', () => { manualMode = false; setNetworkState(true, "OS Wi-Fi interface disconnected"); });
+    window.addEventListener('online', () => { manualMode = false; checkRealInternet(); });
 
     function commitTx() {
         const record = document.getElementById('targetRecord').value.trim();
         const delta = parseInt(document.getElementById('deltaVal').value);
         const ver = parseInt(document.getElementById('baseVer').value);
 
-        if (isCut || !navigator.onLine) {
-            if (!isCut) setNetworkState(true, "OS Wi-Fi interface disconnected");
+        if (isCut) {
             outbox.push({ record, delta, ver });
             document.getElementById('bufferStatus').innerText = `${outbox.length} payload(s) queued`;
             document.getElementById('bufferStatus').className = "mono text-warning";
@@ -352,7 +354,6 @@
             refreshWal();
         })
         .catch(() => {
-            // Auto-fallback to outbox if connection dropped mid-request
             setNetworkState(true, "Upstream connection lost");
             outbox.push({ record, delta, ver });
             document.getElementById('bufferStatus').innerText = `${outbox.length} payload(s) queued`;
