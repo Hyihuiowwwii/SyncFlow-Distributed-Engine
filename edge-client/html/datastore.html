@@ -294,27 +294,61 @@
 </main>
 
 <script>
+    const staticSkus = {
+        maggie: { id: '6ad7088844eb187379d1877b', sku: 'SKU-FMCG-01', cat: 'Packaged Food' },
+        lays_chips: { id: '6ad7088844eb187379d1877c', sku: 'SKU-SNK-02', cat: 'Snacks' },
+        amul_butter: { id: '6ad7088844eb187379d1877d', sku: 'SKU-DAI-03', cat: 'Cold Chain' },
+        coca_cola: { id: '6ad7088844eb187379d1877e', sku: 'SKU-BEV-04', cat: 'Beverages' },
+        tata_salt: { id: '6ad7088844eb187379d1877f', sku: 'SKU-STP-05', cat: 'Staples' },
+        dettol_soap: { id: '6ad7088844eb187379d18780', sku: 'SKU-CARE-06', cat: 'Personal Care' }
+    };
+
     function fetchRecords() {
         fetch('/api/v1/sync/items')
             .then(res => res.json())
             .then(data => {
-                if(data && data.length > 0) {
-                    data.forEach(item => {
-                        if(item.recordId === 'maggie') {
-                            document.getElementById('qty_maggie').innerText = item.quantity;
-                            document.getElementById('ver_maggie').innerText = 'v' + item.version;
-                        } else if(item.recordId === 'lays_chips') {
-                            document.getElementById('qty_lays').innerText = item.quantity;
-                            document.getElementById('ver_lays').innerText = 'v' + item.version;
-                        }
-                    });
-                }
+                if (!data || data.length === 0) return;
+                const tbody = document.getElementById('itemsTable');
+                const liveMap = {};
+                data.forEach(item => { liveMap[item.recordId] = item; });
+
+                const allKeys = new Set([...Object.keys(staticSkus), ...Object.keys(liveMap)]);
+                let rowsHtml = '';
+                let idx = 7;
+
+                allKeys.forEach(key => {
+                    const live = liveMap[key];
+                    const meta = staticSkus[key] || {
+                        id: live && live.id ? live.id : '6ad7088844eb187379d187' + (80 + idx),
+                        sku: 'SKU-DYN-0' + idx++,
+                        cat: 'Dynamic Record'
+                    };
+                    const qty = live ? live.quantity : (key === 'amul_butter' ? 35 : key === 'coca_cola' ? 120 : key === 'tata_salt' ? 8 : 42);
+                    const ver = live ? live.version : (key === 'tata_salt' ? 3 : 1);
+                    const statusBadge = qty < 20
+                        ? '<span class="tag-amber">LOW THRESHOLD</span>'
+                        : '<span class="tag-green">OPTIMAL</span>';
+
+                    rowsHtml += `
+                        <tr>
+                            <td class="mono text-secondary" style="font-size:0.78rem;">${meta.id}</td>
+                            <td class="mono text-secondary" style="font-size:0.78rem;">${meta.sku}</td>
+                            <td class="fw-semibold text-white mono">${key}</td>
+                            <td><span class="tag-subtle">${meta.cat}</span></td>
+                            <td class="mono fw-semibold text-white" id="qty_${key}">${qty}</td>
+                            <td><span class="tag-subtle mono" id="ver_${key}">v${ver}</span></td>
+                            <td><span class="tag-green mono" id="lock_${key}">UNLOCKED</span></td>
+                            <td>${statusBadge}</td>
+                        </tr>`;
+                });
+                tbody.innerHTML = rowsHtml;
             })
             .catch(() => {});
     }
 
     function stressTest() {
         const lockBadge = document.getElementById('lock_maggie');
+        if (!lockBadge) return;
         lockBadge.className = "tag-amber mono";
         lockBadge.innerText = "2PL_LOCKED";
         setTimeout(() => {
@@ -323,6 +357,8 @@
             fetchRecords();
         }, 700);
     }
+
+    window.addEventListener('DOMContentLoaded', fetchRecords);
 </script>
 </body>
 </html>

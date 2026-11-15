@@ -190,7 +190,7 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
                         <h6 class="fw-semibold mb-0 text-white" style="font-size: 0.92rem;">Edge Client Mutation Simulator</h6>
-                        <span class="text-secondary" style="font-size: 0.76rem;">Simulates distributed store node & offline partition buffering</span>
+                        <span class="text-secondary" style="font-size: 0.76rem;">Auto-detects Wi-Fi drop & buffers mutations in local outbox</span>
                     </div>
                     <button class="btn-ghost" id="cutBtn" onclick="togglePartition()">
                         <i class="fa-solid fa-wifi me-1 text-success"></i> Online
@@ -256,7 +256,8 @@
 </main>
 
 <script>
-    let isCut = false;
+    let isCut = !navigator.onLine;
+    let manualOverride = false;
     let outbox = [];
 
     function logHud(msg) {
@@ -266,21 +267,25 @@
         b.scrollTop = b.scrollHeight;
     }
 
-    function togglePartition() {
-        isCut = !isCut;
+    function setNetworkState(offline, reason) {
+        if (isCut === offline) return;
+        isCut = offline;
         const btn = document.getElementById('cutBtn');
         const buf = document.getElementById('bufferStatus');
-        if(isCut) {
+
+        if (isCut) {
             btn.style.borderColor = "#f43f5e";
+            btn.style.background = "rgba(244, 63, 94, 0.14)";
             btn.style.color = "#fb7185";
             btn.innerHTML = "<i class='fa-solid fa-link-slash me-1'></i> Partitioned (Offline)";
-            logHud("<span style='color:#fb7185;'>[NETWORK]</span> Edge link severed. Outgoing mutations diverted to local RAM outbox.");
+            logHud(`<span style='color:#fb7185;'>[NETWORK]</span> ${reason}. Outgoing mutations diverted to local RAM outbox.`);
         } else {
             btn.style.borderColor = "#27272a";
+            btn.style.background = "#18181b";
             btn.style.color = "#fafafa";
             btn.innerHTML = "<i class='fa-solid fa-wifi me-1 text-success'></i> Online";
-            logHud("<span style='color:#34d399;'>[NETWORK]</span> Link restored. Draining local outbox buffer to Core Engine...");
-            while(outbox.length > 0) {
+            logHud(`<span style='color:#34d399;'>[NETWORK]</span> ${reason}. Draining local outbox buffer to Core Engine...`);
+            while (outbox.length > 0) {
                 const item = outbox.shift();
                 sendPayload(item.record, item.delta, item.ver);
             }
@@ -289,12 +294,37 @@
         }
     }
 
+    function togglePartition() {
+        manualOverride = !isCut;
+        setNetworkState(!isCut, !isCut ? "Manual partition simulated" : "Manual link restored");
+    }
+
+    // Automatic OS/Browser Wi-Fi detection
+    window.addEventListener('offline', () => {
+        manualOverride = false;
+        setNetworkState(true, "OS Wi-Fi interface disconnected");
+    });
+
+    window.addEventListener('online', () => {
+        manualOverride = false;
+        setNetworkState(false, "OS Wi-Fi interface reconnected");
+    });
+
+    // Initial check on page load
+    window.addEventListener('DOMContentLoaded', () => {
+        if (!navigator.onLine) {
+            isCut = false;
+            setNetworkState(true, "System booted in offline mode");
+        }
+    });
+
     function commitTx() {
-        const record = document.getElementById('targetRecord').value;
+        const record = document.getElementById('targetRecord').value.trim();
         const delta = parseInt(document.getElementById('deltaVal').value);
         const ver = parseInt(document.getElementById('baseVer').value);
 
-        if(isCut) {
+        if (isCut || !navigator.onLine) {
+            if (!isCut) setNetworkState(true, "OS Wi-Fi interface disconnected");
             outbox.push({ record, delta, ver });
             document.getElementById('bufferStatus').innerText = `${outbox.length} payload(s) queued`;
             document.getElementById('bufferStatus').className = "mono text-warning";
@@ -311,7 +341,10 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ recordId: record, delta: delta, baseVersion: ver })
         })
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error("Network drop");
+            return r.json();
+        })
         .then(() => {
             logHud(`<span style='color:#fbbf24;'>[WAL:FLUSH]</span> Journal entry appended prior to storage mutation.`);
             logHud(`<span style='color:#34d399;'>[2PL:SHRINKING]</span> Committed to MongoDB & lock released. Clock &rarr; v${ver + 1}`);
@@ -319,9 +352,12 @@
             refreshWal();
         })
         .catch(() => {
-            logHud(`<span style='color:#34d399;'>[COMMIT]</span> Transaction finalized. Logical clock &rarr; v${ver + 1}`);
-            document.getElementById('baseVer').value = ver + 1;
-            refreshWal();
+            // Auto-fallback to outbox if connection dropped mid-request
+            setNetworkState(true, "Upstream connection lost");
+            outbox.push({ record, delta, ver });
+            document.getElementById('bufferStatus').innerText = `${outbox.length} payload(s) queued`;
+            document.getElementById('bufferStatus').className = "mono text-warning";
+            logHud(`<span style='color:#fbbf24;'>[OUTBOX]</span> Saved failed packet to RAM outbox: key=${record}, delta=${delta}`);
         });
     }
 
@@ -329,7 +365,7 @@
         fetch('/api/v1/sync/wal')
             .then(r => r.json())
             .then(data => {
-                if(data && data.length > 0) {
+                if (data && data.length > 0) {
                     document.getElementById('walStream').innerHTML = data.map(line => `<div>${line}</div>`).join('');
                 }
             })
